@@ -1,0 +1,82 @@
+using UnityEngine;
+using UnityEngine.XR.ARFoundation;
+using UnityEngine.XR.ARSubsystems;
+using TMPro;
+
+public class ARSceneScanner : MonoBehaviour
+{
+    [Header("AR Components")]
+    public ARMeshManager arMeshManager;
+    public ARSession arSession;
+    
+    [Header("UI Components")]
+    public GameObject scanUI;
+    public TextMeshProUGUI progressText;
+    public GameObject savedMeshPrefab;
+
+    private bool isScanning = false;
+    private float scanProgress = 0f;
+
+    void Start()
+    {
+        arMeshManager.enabled = false;
+        scanUI.SetActive(true);
+        progressText.text = "جاهز للمسح";
+    }
+
+    public void StartScan()
+    {
+        isScanning = true;
+        arMeshManager.enabled = true;
+        scanUI.SetActive(false);
+        scanProgress = 0f;
+        progressText.text = "0%";
+    }
+
+    void Update()
+    {
+        if (!isScanning) return;
+
+        int meshCount = 0;
+        foreach (var _ in arMeshManager.meshes) meshCount++;
+
+        scanProgress = Mathf.Clamp01(meshCount * 0.1f);
+        progressText.text = $"{(scanProgress * 100):0}%";
+
+        if (scanProgress >= 0.95f) StopScan();
+    }
+
+    void StopScan()
+    {
+        isScanning = false;
+        arMeshManager.enabled = false;
+        SaveMeshToFile();
+    }
+
+    void SaveMeshToFile()
+    {
+        Mesh combinedMesh = CombineMeshes(arMeshManager.meshes);
+        
+        if (combinedMesh == null)
+        {
+            progressText.text = "فشل المسح! حاول مرة أخرى";
+            return;
+        }
+
+        GameObject savedMesh = Instantiate(savedMeshPrefab);
+        savedMesh.GetComponent<MeshFilter>().mesh = combinedMesh;
+        progressText.text = "تم المسح بنجاح!";
+    }
+
+    private Mesh CombineMeshes(TrackableCollection<ARMesh> meshCollection)
+    {
+        CombineInstance[] combine = new CombineInstance[meshCollection.count];
+        int i = 0;
+        
+        foreach (var mesh in meshCollection)
+        {
+            if (mesh.meshFilter == null || mesh.meshFilter.sharedMesh == null) continue;
+            
+            combine[i].mesh = mesh.meshFilter.sharedMesh;
+            combine[i].transform = mesh.transform.localToWorldMatrix;
+            i++;
